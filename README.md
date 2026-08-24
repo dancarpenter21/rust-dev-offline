@@ -2,8 +2,8 @@
 
 This repository builds a Rust development image for a corporate network that
 has no public internet access. The finished container includes Cargo, rustup,
-Clippy, rustfmt, rust-analyzer, local Rust documentation, and common native
-build tools.
+Clippy, rustfmt, rust-analyzer, cargo-watch, local Rust documentation, and
+common native build tools.
 
 The corporate network must provide two reachable sparse Cargo registries:
 
@@ -82,15 +82,21 @@ docker buildx build --load \
 
 This step performs no package installation and does not fetch crates. It only
 uses the imported bootstrap image, installs the corporate CA certificates, and
-records the internal registry endpoints.
+records the internal registry endpoints. The portable Cargo configuration
+template and dependency-fetch retry helper are also included in the image.
 
 ## Run the development container
 
 Start an interactive Bash shell and mount the current project directory at
-`/workspace`:
+`/workspace`. Use a named volume for Cargo's registry cache so successfully
+downloaded crates survive container removal and do not need to be fetched
+again:
 
 ```sh
+docker volume create rust-cargo-registry
+
 docker run --rm -it \
+  --mount type=volume,src=rust-cargo-registry,dst=/usr/local/cargo/registry \
   --volume "$PWD:/workspace" \
   rust-dev-corporate:1.97.1 \
   bash
@@ -110,6 +116,7 @@ export CARGO_REGISTRIES_CORP_PRIVATE_TOKEN='...'
 docker run --rm -it \
   --env CARGO_REGISTRIES_CORP_MIRROR_TOKEN \
   --env CARGO_REGISTRIES_CORP_PRIVATE_TOKEN \
+  --mount type=volume,src=rust-cargo-registry,dst=/usr/local/cargo/registry \
   --volume "$PWD:/workspace" \
   rust-dev-corporate:1.97.1 \
   bash
@@ -133,6 +140,63 @@ serde = "1"
 
 Cargo resolves the latter through `corp-mirror`, including when an existing
 `Cargo.lock` identifies crates.io as the original source.
+
+## Resilient dependency fetching
+
+The image configures Cargo to retry transient registry failures up to ten
+times, allows 120 seconds per HTTP request, and tolerates very slow transfers.
+These settings apply automatically to Cargo commands in the corporate image.
+
+For an unreliable internal registry, fetch the entire locked dependency graph
+with the bounded retry helper before building:
+
+```sh
+cargo-fetch-retry --locked
+cargo build --frozen
+```
+
+The helper retries the whole fetch up to five times with increasing delays.
+Cargo reuses crates that were downloaded successfully during earlier attempts,
+especially when the registry-cache volume shown above is mounted. Override the
+outer retry policy when necessary:
+
+```sh
+CARGO_FETCH_MAX_ATTEMPTS=8 \
+CARGO_FETCH_RETRY_DELAY_SECONDS=15 \
+  cargo-fetch-retry --locked
+```
+
+Retries can help with timeouts, connection resets, and temporary server errors.
+They cannot repair authentication failures, TLS trust errors, missing crate
+versions, or checksum mismatches. Those failures require correcting the token,
+CA chain, or internal registry contents.
+
+## Portable Cargo configuration template
+
+An editable configuration is available in this repository at
+`config/cargo-config.toml.template` and in the corporate image at
+`/usr/local/share/rust-dev-offline/cargo-config.toml.template`. It contains the
+registry replacement, authentication provider, and retry settings without any
+credentials.
+
+To use it for a project or on another imported development environment:
+
+```sh
+mkdir -p .cargo
+cp /usr/local/share/rust-dev-offline/cargo-config.toml.template \
+  .cargo/config.toml
+```
+
+Edit the two `index` values in `.cargo/config.toml`, preserving the
+`sparse+https://` prefix and trailing `/`. Tokens must still be provided using
+`CARGO_REGISTRIES_CORP_MIRROR_TOKEN` and
+`CARGO_REGISTRIES_CORP_PRIVATE_TOKEN`.
+
+The corporate image already sets both registry indexes from its build
+arguments. Cargo environment variables have precedence over configuration
+files, so override or unset `CARGO_REGISTRIES_CORP_MIRROR_INDEX` and
+`CARGO_REGISTRIES_CORP_PRIVATE_INDEX` when intentionally using different URLs
+from the template.
 
 ## Build interface
 
@@ -158,15 +222,17 @@ access:
 rustc --version
 cargo --version
 cargo clippy --version
+cargo watch --version
 rustfmt --version
 rust-analyzer --version
 rustup component list --installed
-cargo fetch --locked
+cargo-fetch-retry --locked
+cargo build --frozen
 ```
 
-Run `cargo fetch --locked` from a project whose complete dependency graph is
-present in the internal mirror. A manifest or lockfile containing a `git+`
-source will fail because Git dependencies are intentionally unsupported.
+Run the fetch helper from a project whose complete dependency graph is present
+in the internal mirror. A manifest or lockfile containing a `git+` source will
+fail because Git dependencies are intentionally unsupported.
 
 ## Troubleshoot Docker Desktop with WSL
 

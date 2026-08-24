@@ -12,3 +12,12 @@ replace-with = "corp-mirror"
 [registry]
 default = "corp-private"
 global-credential-providers = ["cargo:token"]
+
+# Retry transient failures from the internal registries. Successful downloads
+# remain in Cargo's registry cache and are reused by later attempts.
+[net]
+retry = 10
+
+[http]
+timeout = 120
+low-speed-limit = 1

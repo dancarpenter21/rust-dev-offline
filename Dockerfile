@@ -27,9 +27,14 @@ RUN set -eux; \
 
 RUN set -eux; \
     rustup component add clippy rust-analyzer rust-docs rustfmt; \
+    CARGO_NET_RETRY=10 \
+        CARGO_HTTP_TIMEOUT=120 \
+        CARGO_HTTP_LOW_SPEED_LIMIT=1 \
+        cargo install --locked cargo-watch; \
     rustc --version; \
     cargo --version; \
     cargo clippy --version; \
+    cargo watch --version; \
     rustfmt --version; \
     rust-analyzer --version
 
@@ -41,7 +46,7 @@ RUN set -eux; \
         --create-home \
         --shell /bin/bash \
         developer; \
-    mkdir -p /workspace; \
+    mkdir -p /usr/local/cargo/registry /workspace; \
     chown -R developer:developer \
         /usr/local/cargo \
         /usr/local/rustup \
@@ -77,6 +82,8 @@ RUN set -eux; \
     update-ca-certificates
 
 COPY config/cargo-config.toml /usr/local/cargo/config.toml
+COPY config/cargo-config.toml.template /usr/local/share/rust-dev-offline/cargo-config.toml.template
+COPY --chmod=0755 scripts/cargo-fetch-retry /usr/local/bin/cargo-fetch-retry
 
 ENV CARGO_REGISTRIES_CORP_MIRROR_INDEX=${CRATES_IO_MIRROR_INDEX} \
     CARGO_REGISTRIES_CORP_PRIVATE_INDEX=${PRIVATE_REGISTRY_INDEX}

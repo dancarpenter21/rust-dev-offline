@@ -1,0 +1,31 @@
+# Portable Cargo configuration for the air-gapped corporate network.
+#
+# Replace both example index URLs before using this file. Sparse registry URLs
+# must start with "sparse+https://" and end with "/". Do not put registry tokens
+# in this file; provide them through Cargo's registry token environment variables.
+
+[registries.corp-mirror]
+index = "sparse+https://cargo.example.corp/crates-io/index/"
+credential-provider = "cargo:token"
+
+[registries.corp-private]
+index = "sparse+https://cargo.example.corp/private/index/"
+credential-provider = "cargo:token"
+
+[source.crates-io]
+replace-with = "corp-mirror"
+
+[registry]
+default = "corp-private"
+global-credential-providers = ["cargo:token"]
+
+[net]
+retry = 10
+
+[http]
+timeout = 120
+low-speed-limit = 1
+
+# Some corporate proxies handle HTTP/2 poorly. Uncomment this only when
+# registry logs or network diagnostics indicate an HTTP/2 problem.
+# multiplexing = false

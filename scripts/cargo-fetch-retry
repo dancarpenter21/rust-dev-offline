@@ -1,0 +1,38 @@
+#!/bin/sh
+
+set -u
+
+max_attempts=${CARGO_FETCH_MAX_ATTEMPTS:-5}
+base_delay=${CARGO_FETCH_RETRY_DELAY_SECONDS:-10}
+
+case "$max_attempts" in
+    ''|*[!0-9]*|0)
+        echo >&2 "CARGO_FETCH_MAX_ATTEMPTS must be a positive integer"
+        exit 2
+        ;;
+esac
+
+case "$base_delay" in
+    ''|*[!0-9]*)
+        echo >&2 "CARGO_FETCH_RETRY_DELAY_SECONDS must be a non-negative integer"
+        exit 2
+        ;;
+esac
+
+attempt=1
+
+while ! cargo fetch "$@"; do
+    if [ "$attempt" -ge "$max_attempts" ]; then
+        echo >&2 "cargo fetch failed after ${attempt} attempts"
+        exit 1
+    fi
+
+    delay=$((attempt * base_delay))
+    if [ "$delay" -gt 60 ]; then
+        delay=60
+    fi
+
+    echo >&2 "cargo fetch attempt ${attempt} failed; retrying in ${delay}s"
+    sleep "$delay"
+    attempt=$((attempt + 1))
+done
