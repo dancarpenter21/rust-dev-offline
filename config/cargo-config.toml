@@ -1,19 +1,15 @@
-# The index URLs are supplied by the corporate Docker build as Cargo-supported
-# environment variables. Tokens must only be supplied when the container runs.
-[registries.corp-mirror]
-credential-provider = "cargo:token"
-
-[registries.corp-private]
+# The index URL is supplied by the corporate Docker build as a Cargo-supported
+# environment variable. A token must only be supplied when the container runs.
+[registries.crates-io-mirror]
 credential-provider = "cargo:token"
 
 [source.crates-io]
-replace-with = "corp-mirror"
+replace-with = "crates-io-mirror"
 
 [registry]
-default = "corp-private"
 global-credential-providers = ["cargo:token"]
 
-# Retry transient failures from the internal registries. Successful downloads
+# Retry transient failures from the internal registry. Successful downloads
 # remain in Cargo's registry cache and are reused by later attempts.
 [net]
 retry = 10

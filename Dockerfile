@@ -62,7 +62,6 @@ CMD ["bash"]
 FROM ${BOOTSTRAP_IMAGE} AS corporate
 
 ARG CRATES_IO_MIRROR_INDEX
-ARG PRIVATE_REGISTRY_INDEX
 
 USER root
 
@@ -70,14 +69,9 @@ COPY certificates/*.crt /usr/local/share/ca-certificates/corporate/
 
 RUN set -eux; \
     test -n "${CRATES_IO_MIRROR_INDEX}"; \
-    test -n "${PRIVATE_REGISTRY_INDEX}"; \
     case "${CRATES_IO_MIRROR_INDEX}" in \
         sparse+https://*/) ;; \
         *) echo >&2 "CRATES_IO_MIRROR_INDEX must be a sparse+https URL ending in /"; exit 1 ;; \
-    esac; \
-    case "${PRIVATE_REGISTRY_INDEX}" in \
-        sparse+https://*/) ;; \
-        *) echo >&2 "PRIVATE_REGISTRY_INDEX must be a sparse+https URL ending in /"; exit 1 ;; \
     esac; \
     update-ca-certificates
 
@@ -85,8 +79,7 @@ COPY config/cargo-config.toml /usr/local/cargo/config.toml
 COPY config/cargo-config.toml.template /usr/local/share/rust-dev-offline/cargo-config.toml.template
 COPY --chmod=0755 scripts/cargo-fetch-retry /usr/local/bin/cargo-fetch-retry
 
-ENV CARGO_REGISTRIES_CORP_MIRROR_INDEX=${CRATES_IO_MIRROR_INDEX} \
-    CARGO_REGISTRIES_CORP_PRIVATE_INDEX=${PRIVATE_REGISTRY_INDEX}
+ENV CARGO_REGISTRIES_CRATES_IO_MIRROR_INDEX=${CRATES_IO_MIRROR_INDEX}
 
 WORKDIR /workspace
 USER developer

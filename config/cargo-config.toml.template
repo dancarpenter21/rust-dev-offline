@@ -1,22 +1,17 @@
 # Portable Cargo configuration for the air-gapped corporate network.
 #
-# Replace both example index URLs before using this file. Sparse registry URLs
-# must start with "sparse+https://" and end with "/". Do not put registry tokens
-# in this file; provide them through Cargo's registry token environment variables.
+# Replace the example index URL before using this file. The sparse registry URL
+# must start with "sparse+https://" and end with "/". Do not put a registry token
+# in this file; provide it through Cargo's registry token environment variable.
 
-[registries.corp-mirror]
+[registries.crates-io-mirror]
 index = "sparse+https://cargo.example.corp/crates-io/index/"
 credential-provider = "cargo:token"
 
-[registries.corp-private]
-index = "sparse+https://cargo.example.corp/private/index/"
-credential-provider = "cargo:token"
-
 [source.crates-io]
-replace-with = "corp-mirror"
+replace-with = "crates-io-mirror"
 
 [registry]
-default = "corp-private"
 global-credential-providers = ["cargo:token"]
 
 [net]

@@ -5,15 +5,13 @@ has no public internet access. The finished container includes Cargo, rustup,
 Clippy, rustfmt, rust-analyzer, cargo-watch, local Rust documentation, and
 common native build tools.
 
-The corporate network must provide two reachable sparse Cargo registries:
+The corporate network must provide one reachable sparse Cargo registry named
+`crates-io-mirror`. It must be a complete, exact mirror of crates.io.
 
-- `corp-mirror`: a complete, exact mirror of crates.io;
-- `corp-private`: the registry for private corporate crates.
-
-Cargo transparently replaces crates.io dependencies with `corp-mirror` and
-uses `corp-private` as the default registry for publishing commands. Git
-dependencies are unsupported; publish those dependencies to an internal Cargo
-registry before using them in this environment.
+Cargo transparently replaces crates.io dependencies with `crates-io-mirror`.
+Private registry dependencies and publishing are outside the scope of this
+image. Git dependencies are also unsupported; every dependency must be
+available as a crate in the mirror.
 
 ## Build workflow
 
@@ -75,14 +73,13 @@ docker buildx build --load \
   --target corporate \
   --build-arg BOOTSTRAP_IMAGE=rust-dev-bootstrap:1.97.1-bookworm \
   --build-arg CRATES_IO_MIRROR_INDEX=sparse+https://cargo.example.corp/crates-io/index/ \
-  --build-arg PRIVATE_REGISTRY_INDEX=sparse+https://cargo.example.corp/private/index/ \
   --tag rust-dev-corporate:1.97.1 \
   .
 ```
 
 This step performs no package installation and does not fetch crates. It only
 uses the imported bootstrap image, installs the corporate CA certificates, and
-records the internal registry endpoints. The portable Cargo configuration
+records the internal registry endpoint. The portable Cargo configuration
 template and dependency-fetch retry helper are also included in the image.
 
 ## Run the development container
@@ -110,12 +107,10 @@ Registry tokens are optional when a registry permits anonymous reads. When
 required, set them in the host environment and pass them through at runtime:
 
 ```sh
-export CARGO_REGISTRIES_CORP_MIRROR_TOKEN='...'
-export CARGO_REGISTRIES_CORP_PRIVATE_TOKEN='...'
+export CARGO_REGISTRIES_CRATES_IO_MIRROR_TOKEN='...'
 
 docker run --rm -it \
-  --env CARGO_REGISTRIES_CORP_MIRROR_TOKEN \
-  --env CARGO_REGISTRIES_CORP_PRIVATE_TOKEN \
+  --env CARGO_REGISTRIES_CRATES_IO_MIRROR_TOKEN \
   --mount type=volume,src=rust-cargo-registry,dst=/usr/local/cargo/registry \
   --volume "$PWD:/workspace" \
   rust-dev-corporate:1.97.1 \
@@ -124,21 +119,14 @@ docker run --rm -it \
 
 Do not pass tokens as Docker build arguments or store them in the Cargo config.
 
-For a private dependency, use the stable registry name from the image:
-
-```toml
-[dependencies]
-internal-library = { version = "1.2.3", registry = "corp-private" }
-```
-
-Ordinary dependencies need no changes:
+Crates.io dependencies need no manifest changes:
 
 ```toml
 [dependencies]
 serde = "1"
 ```
 
-Cargo resolves the latter through `corp-mirror`, including when an existing
+Cargo resolves them through `crates-io-mirror`, including when an existing
 `Cargo.lock` identifies crates.io as the original source.
 
 ## Resilient dependency fetching
@@ -187,16 +175,14 @@ cp /usr/local/share/rust-dev-offline/cargo-config.toml.template \
   .cargo/config.toml
 ```
 
-Edit the two `index` values in `.cargo/config.toml`, preserving the
-`sparse+https://` prefix and trailing `/`. Tokens must still be provided using
-`CARGO_REGISTRIES_CORP_MIRROR_TOKEN` and
-`CARGO_REGISTRIES_CORP_PRIVATE_TOKEN`.
+Edit the `index` value in `.cargo/config.toml`, preserving the
+`sparse+https://` prefix and trailing `/`. A token, when required, must still be
+provided using `CARGO_REGISTRIES_CRATES_IO_MIRROR_TOKEN`.
 
-The corporate image already sets both registry indexes from its build
-arguments. Cargo environment variables have precedence over configuration
-files, so override or unset `CARGO_REGISTRIES_CORP_MIRROR_INDEX` and
-`CARGO_REGISTRIES_CORP_PRIVATE_INDEX` when intentionally using different URLs
-from the template.
+The corporate image already sets the registry index from its build argument.
+Cargo environment variables have precedence over configuration files, so
+override or unset `CARGO_REGISTRIES_CRATES_IO_MIRROR_INDEX` when intentionally
+using a different URL from the template.
 
 ## Build interface
 
@@ -207,7 +193,6 @@ from the template.
 | `DEV_GID` | `1000` | Numeric GID of the container's `developer` group |
 | `BOOTSTRAP_IMAGE` | `rust-dev-bootstrap:1.97.1-bookworm` | Imported base used by the corporate target |
 | `CRATES_IO_MIRROR_INDEX` | required | Internal crates.io sparse-index URL |
-| `PRIVATE_REGISTRY_INDEX` | required | Internal private sparse-index URL |
 
 The UID and GID are fixed when the bootstrap image is built. Set them to the
 expected developer IDs when bind-mounted source directories require matching
