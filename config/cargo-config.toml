@@ -1,0 +1,14 @@
+# The index URLs are supplied by the corporate Docker build as Cargo-supported
+# environment variables. Tokens must only be supplied when the container runs.
+[registries.corp-mirror]
+credential-provider = "cargo:token"
+
+[registries.corp-private]
+credential-provider = "cargo:token"
+
+[source.crates-io]
+replace-with = "corp-mirror"
+
+[registry]
+default = "corp-private"
+global-credential-providers = ["cargo:token"]
